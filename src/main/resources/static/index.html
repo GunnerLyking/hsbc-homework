@@ -1,6 +1,405 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>事件管理系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+        }
+        h1 {
+            margin: 0;
+        }
+        .container {
+            width: 80%;
+            margin: 30px auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        form label {
+            font-size: 16px;
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        form input, form select, form textarea {
+            padding: 8px;
+            font-size: 14px;
+            width: 100%;
+            max-width: 300px;
+        }
+        form button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        form button:hover {
+            background-color: #45a049;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 12px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+            color: #333;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .pagination button {
+            padding: 5px 15px;
+            margin: 0 5px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .pagination button:hover {
+            background-color: #0056b3;
+        }
+        .pagination button:disabled {
+            background-color: #ddd;
+            cursor: not-allowed;
+        }
+        .operation-btn {
+            background-color: #ff5733;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        .operation-btn:hover {
+            background-color: #e64a19;
+        }
+        .form-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .form-container > div {
+            width: 32%;
+        }
+
+        /* 编辑弹窗样式 */
+        #editModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            width: 300px;
+            text-align: center;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+    </style>
+    <script>
+        let currentPage = 1;
+        const pageSize = 5;
+        let editingIncidentId = null;
+
+        function getIncidents(page) {
+            fetch(`http://localhost:8001/incident/query`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ page: page, size: pageSize })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    const incidents = data.data.content;
+                    const tableBody = document.getElementById("incident-table-body");
+                    tableBody.innerHTML = "";
+                    incidents.forEach(incident => {
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                        <td>${incident.id}</td>
+                        <td>${new Date(incident.createTime).toLocaleString()}</td>
+                        <td>${incident.type}</td>
+                        <td>${incident.status}</td>
+                        <td>${incident.msg}</td>
+                        <td>
+                            <button class="operation-btn" onclick="editIncident(${incident.id})">修改</button>
+                            <button class="operation-btn" onclick="deleteIncident(${incident.id})">删除</button>
+                        </td>
+                    `;
+                        tableBody.appendChild(row);
+                    });
+
+                    const totalPages = data.data.totalPages;
+                    updatePagination(totalPages, page);
+                })
+                .catch(error => {
+                    console.error("Error fetching incidents:", error);
+                });
+        }
+
+        function updatePagination(totalPages, currentPage) {
+            const pagination = document.getElementById("pagination");
+            pagination.innerHTML = "";
+
+            if (currentPage > 1) {
+                const prevButton = document.createElement("button");
+                prevButton.innerText = "上一页";
+                prevButton.onclick = () => getIncidents(currentPage - 1);
+                pagination.appendChild(prevButton);
+            }
+
+            for (let i = 1; i <= totalPages; i++) {
+                const pageButton = document.createElement("button");
+                pageButton.innerText = i;
+                pageButton.onclick = () => getIncidents(i);
+                if (i === currentPage) {
+                    pageButton.disabled = true;
+                }
+                pagination.appendChild(pageButton);
+            }
+
+            if (currentPage < totalPages) {
+                const nextButton = document.createElement("button");
+                nextButton.innerText = "下一页";
+                nextButton.onclick = () => getIncidents(currentPage + 1);
+                pagination.appendChild(nextButton);
+            }
+        }
+
+        function createIncident() {
+            const type = document.getElementById("type").value;
+            const status = document.getElementById("status").value;
+            const msg = document.getElementById("msg").value;
+
+            const incident = { type, status, msg };
+
+            fetch("http://localhost:8001/incident", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(incident)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    alert("事件创建成功！");
+                    getIncidents(currentPage);
+                })
+                .catch(error => {
+                    console.error("Error creating incident:", error);
+                });
+        }
+
+        function deleteIncident(id) {
+            fetch(`http://localhost:8001/incident/${id}`, {
+                method: "DELETE",
+            })
+                .then(response => response.json())
+                .then(data => {
+                    alert("事件删除成功！");
+                    getIncidents(currentPage);
+                })
+                .catch(error => {
+                    console.error("Error deleting incident:", error);
+                });
+        }
+
+        function editIncident(id) {
+            editingIncidentId = id;
+            fetch(`http://localhost:8001/incident/${id}`)
+                .then(response => response.json())
+                .then(data => {
+                    const incident = data.data;
+                    document.getElementById("editType").value = incident.type;
+                    document.getElementById("editStatus").value = incident.status;
+                    document.getElementById("editMsg").value = incident.msg;
+                    document.getElementById("editModal").style.display = "flex";  // 显示弹窗
+                })
+                .catch(error => {
+                    console.error("Error fetching incident:", error);
+                });
+        }
+
+        function closeModal() {
+            document.getElementById("editModal").style.display = "none";
+        }
+
+        function submitEdit(event) {
+            event.preventDefault();
+
+            const type = document.getElementById("editType").value;
+            const status = document.getElementById("editStatus").value;
+            const msg = document.getElementById("editMsg").value;
+
+            const updatedIncident = {
+                id: editingIncidentId,
+                type: type,
+                status: status,
+                msg: msg
+            };
+
+            fetch("http://localhost:8001/incident", {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(updatedIncident),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    alert("事件更新成功！");
+                    closeModal();
+                    getIncidents(currentPage);
+                })
+                .catch(error => {
+                    console.error("Error updating incident:", error);
+                });
+        }
+
+        function queryIncidents() {
+            getIncidents(currentPage);
+        }
+    </script>
+</head>
 <body>
-<h1>hello word!!!</h1>
-<p>this is a html page</p>
+<header>
+    <h1>事件管理系统</h1>
+</header>
+
+<div class="container">
+    <h3>创建事件</h3>
+    <form onsubmit="event.preventDefault(); createIncident();">
+        <div class="form-container">
+            <div>
+                <label for="type">事件类型:</label>
+                <select id="type">
+                    <option value="Info">Info</option>
+                    <option value="Warning">Warning</option>
+                    <option value="Error">Error</option>
+                </select>
+            </div>
+            <div>
+                <label for="status">事件状态:</label>
+                <select id="status">
+                    <option value="Pending">Pending</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                </select>
+            </div>
+            <div>
+                <label for="msg">事件消息:</label>
+                <textarea id="msg" required></textarea>
+            </div>
+        </div>
+        <button type="submit">创建事件</button>
+    </form>
+
+    <button onclick="queryIncidents()">查询事件</button>
+
+    <h3>事件列表</h3>
+    <table>
+        <thead>
+        <tr>
+            <th>事件ID</th>
+            <th>创建时间</th>
+            <th>事件类型</th>
+            <th>事件状态</th>
+            <th>事件消息</th>
+            <th>操作</th>
+        </tr>
+        </thead>
+        <tbody id="incident-table-body"></tbody>
+    </table>
+
+    <div id="pagination" class="pagination"></div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div id="editModal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h3>编辑事件</h3>
+        <form onsubmit="submitEdit(event)">
+            <div class="form-container">
+                <div>
+                    <label for="editType">事件类型:</label>
+                    <select id="editType">
+                        <option value="Info">Info</option>
+                        <option value="Warning">Warning</option>
+                        <option value="Error">Error</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="editStatus">事件状态:</label>
+                    <select id="editStatus">
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                        <option value="Closed">Closed</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="editMsg">事件消息:</label>
+                    <textarea id="editMsg" required></textarea>
+                </div>
+            </div>
+            <button type="submit">保存修改</button>
+        </form>
+    </div>
+</div>
+
 </body>
 </html>
