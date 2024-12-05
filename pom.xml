@@ -73,7 +73,6 @@
                 <version>${spring-boot.version}</version>
                 <configuration>
                     <mainClass>com.hsbc.incident.IncidentApplication</mainClass>
-                    <skip>true</skip>
                 </configuration>
                 <executions>
                     <execution>
